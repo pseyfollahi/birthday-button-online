@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fa">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Receiver</title>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: white;
+            font-family: Tahoma, sans-serif;
+        }
+
+        #message {
+            font-size: 70px;
+            color: green;
+            text-align: center;
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <div id="message">در انتظار...</div>
+
+    <script>
+        const socket = io();
+
+        socket.on("birthday_message", function (data) {
+            document.getElementById("message").innerHTML = data.text;
+        });
+    </script>
+
+</body>
+
+</html>

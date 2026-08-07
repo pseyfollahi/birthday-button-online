@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fa">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Button</title>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #f5f5f5;
+        }
+
+        button {
+            width: 220px;
+            height: 220px;
+            border: none;
+            border-radius: 50%;
+            background: red;
+            color: white;
+            font-size: 40px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+    <button onclick="sendMessage()">Button</button>
+
+    <script>
+        const socket = io();
+
+        function sendMessage() {
+            socket.emit("button_pressed");
+        }
+    </script>
+
+</body>
+
+</html>
