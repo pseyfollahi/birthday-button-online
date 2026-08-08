@@ -45,18 +45,10 @@
     <script>
         const VAPID_PUBLIC_KEY = "BK5J-HXfz8fa-OWVNtZwxguWBaPbMmX0jKIe4XIEnEV7lt31K1DO7Is6pMtMDsXpWW2qjzGhvsMusNbUmlYG0b8";
 
-        // ثبت Service Worker
-        async function registerServiceWorker() {
-            if (!("serviceWorker" in navigator)) {
-                throw new Error("Service Worker پشتیبانی نمی‌شود.");
-            }
-
-            return await navigator.serviceWorker.register("/sw.js");
-        }
-
-        // تبدیل Base64 URL به Uint8Array
         function urlBase64ToUint8Array(base64String) {
-            const padding = "=".repeat((4 - base64String.length % 4) % 4);
+            const padding = "=".repeat(
+                (4 - base64String.length % 4) % 4
+            );
 
             const base64 = (base64String + padding)
                 .replace(/-/g, "+")
@@ -69,58 +61,114 @@
             );
         }
 
-        // فعال کردن Push Notification
+        async function registerServiceWorker() {
+            if (!("serviceWorker" in navigator)) {
+                throw new Error(
+                    "این مرورگر از Service Worker پشتیبانی نمی‌کند."
+                );
+            }
+
+            return await navigator.serviceWorker.register("/sw.js");
+        }
+
         async function enableNotifications() {
             try {
-                const registration = await registerServiceWorker();
+                const registration =
+                    await registerServiceWorker();
 
-                const permission = await Notification.requestPermission();
+                console.log("Service Worker registered.");
+
+                if (!("Notification" in window)) {
+                    throw new Error(
+                        "اعلان‌ها در این مرورگر پشتیبانی نمی‌شوند."
+                    );
+                }
+
+                const permission =
+                    await Notification.requestPermission();
+
+                console.log(
+                    "Notification permission:",
+                    permission
+                );
 
                 if (permission !== "granted") {
-                    alert("اجازه اعلان‌ها داده نشد.");
-                    return;
+                    throw new Error(
+                        "اجازه اعلان‌ها داده نشد."
+                    );
                 }
 
                 const subscription =
                     await registration.pushManager.subscribe({
                         userVisibleOnly: true,
                         applicationServerKey:
-                            urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                            urlBase64ToUint8Array(
+                                VAPID_PUBLIC_KEY
+                            )
                     });
 
-                console.log("Push Subscription:", subscription);
+                console.log(
+                    "Push subscription created:",
+                    subscription
+                );
 
-                const response = await fetch("/subscribe", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify(subscription)
-                });
+                const response = await fetch(
+                    "/subscribe",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+                        body: JSON.stringify(
+                            subscription
+                        )
+                    }
+                );
 
-                if (response.ok) {
-                    alert("اعلان‌ها فعال شدند ✅");
-                } else {
-                    alert("ثبت اعلان‌ها روی سرور انجام نشد.");
+                if (!response.ok) {
+                    throw new Error(
+                        "سرور Subscription را قبول نکرد."
+                    );
                 }
 
+                alert(
+                    "اعلان‌ها فعال شدند ✅"
+                );
+
             } catch (error) {
-                console.error(error);
-                alert("فعال‌سازی اعلان‌ها با خطا مواجه شد.");
+
+                console.error(
+                    "Notification error:",
+                    error
+                );
+
+                alert(
+                    "خطا:\n" +
+                    (error.message || error)
+                );
             }
         }
 
         document
             .getElementById("enableNotifications")
-            .addEventListener("click", enableNotifications);
+            .addEventListener(
+                "click",
+                enableNotifications
+            );
 
 
-        // Socket.IO فعلی پروژه
+        // Socket.IO
         const socket = io();
 
-        socket.on("birthday_message", function (data) {
-            document.getElementById("message").innerHTML = data.text;
-        });
+        socket.on(
+            "birthday_message",
+            function (data) {
+                document.getElementById(
+                    "message"
+                ).innerHTML = data.text;
+            }
+        );
     </script>
 
 </body>
