@@ -1,5 +1,4 @@
 import json
-import os
 
 from flask import Flask, render_template, send_from_directory, request, jsonify
 from flask_socketio import SocketIO
@@ -15,16 +14,13 @@ socketio = SocketIO(
 )
 
 
-# محل فایل کلید خصوصی روی Render
 VAPID_PRIVATE_KEY = "/etc/secrets/vapid_private.pem"
 
-# این آدرس باید ایمیل خودت باشد
 VAPID_CLAIMS = {
     "sub": "mailto:pseyfollahi@gmail.com"
 }
 
 
-# ذخیره Subscription ها
 subscriptions = []
 
 
@@ -43,9 +39,9 @@ def service_worker():
     return send_from_directory(".", "sw.js")
 
 
-# دریافت Push Subscription از گوشی
 @app.route("/subscribe", methods=["POST"])
 def subscribe():
+
     subscription = request.get_json()
 
     if not subscription:
@@ -54,7 +50,6 @@ def subscribe():
             "message": "Subscription دریافت نشد"
         }), 400
 
-    # جلوگیری از ذخیره تکراری
     if subscription not in subscriptions:
         subscriptions.append(subscription)
 
@@ -65,29 +60,29 @@ def subscribe():
     })
 
 
-# وقتی دکمه قرمز زده می‌شود
 @socketio.on("button_pressed")
 def button_pressed():
 
     message = {
-        "text": "🎉 تولدت مبارک 🎂"
+        "text": "بیا بازی 🎮"
     }
 
-    # پیام لحظه‌ای برای صفحه گیرنده
+    # نمایش پیام در صفحه Receiver
     socketio.emit(
         "birthday_message",
         message
     )
 
-    # ارسال Push Notification
+    # ارسال اعلان حتی وقتی Receiver باز نیست
     push_data = json.dumps({
-        "title": "پیام جدید 🎉",
-        "body": "🎉 تولدت مبارک 🎂"
+        "title": "پیام جدید 🎮",
+        "body": "بیا بازی 🎮"
     })
 
     for subscription in subscriptions:
 
         try:
+
             webpush(
                 subscription_info=subscription,
                 data=push_data,
@@ -98,10 +93,12 @@ def button_pressed():
             print("Push notification sent.")
 
         except WebPushException as error:
+
             print("Push error:", error)
 
 
 if __name__ == "__main__":
+
     socketio.run(
         app,
         host="0.0.0.0",
