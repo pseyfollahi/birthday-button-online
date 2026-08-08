@@ -30,7 +30,21 @@
 
     <div id="message">در انتظار...</div>
 
+    <button id="enableNotifications">
+        فعال کردن اعلان‌ها
+    </button>
     <script>
+
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("/sw.js")
+                .then(() => {
+                    console.log("Service Worker registered");
+                })
+                .catch((error) => {
+                    console.error("Service Worker error:", error);
+                });
+        }
+
         const socket = io();
 
         socket.on("birthday_message", function (data) {
