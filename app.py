@@ -1,4 +1,5 @@
 import json
+import os
 
 from flask import Flask, render_template, send_from_directory, request, jsonify
 from flask_socketio import SocketIO
@@ -44,16 +45,31 @@ def subscribe():
 
     subscription = request.get_json()
 
+    print("================================")
+    print("NEW PUSH SUBSCRIPTION RECEIVED")
+    print(json.dumps(subscription, indent=2))
+    print("================================")
+
     if not subscription:
         return jsonify({
             "success": False,
             "message": "Subscription دریافت نشد"
         }), 400
 
-    if subscription not in subscriptions:
-        subscriptions.append(subscription)
+    # جلوگیری از ثبت تکراری
+    endpoint = subscription.get("endpoint")
 
-    print("Push subscription saved.")
+    for old_subscription in subscriptions:
+        if old_subscription.get("endpoint") == endpoint:
+            print("Subscription already exists.")
+            return jsonify({
+                "success": True
+            })
+
+    subscriptions.append(subscription)
+
+    print("Subscription saved successfully.")
+    print("Total subscriptions:", len(subscriptions))
 
     return jsonify({
         "success": True
@@ -67,17 +83,22 @@ def button_pressed():
         "text": "بیا بازی 🎮"
     }
 
-    # نمایش پیام در صفحه Receiver
+    # نمایش داخل صفحه Receiver
     socketio.emit(
         "birthday_message",
         message
     )
 
-    # ارسال اعلان حتی وقتی Receiver باز نیست
+    # Push Notification
     push_data = json.dumps({
         "title": "پیام جدید 🎮",
         "body": "بیا بازی 🎮"
     })
+
+    print("================================")
+    print("SENDING PUSH NOTIFICATION")
+    print("Subscriptions:", len(subscriptions))
+    print("================================")
 
     for subscription in subscriptions:
 
@@ -90,11 +111,12 @@ def button_pressed():
                 vapid_claims=VAPID_CLAIMS
             )
 
-            print("Push notification sent.")
+            print("Push notification sent successfully.")
 
         except WebPushException as error:
 
-            print("Push error:", error)
+            print("PUSH ERROR:")
+            print(error)
 
 
 if __name__ == "__main__":
