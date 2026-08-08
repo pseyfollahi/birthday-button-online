@@ -1,5 +1,7 @@
 self.addEventListener("push", function (event) {
-    const data = event.data ? event.data.json() : {};
+    const data = event.data
+        ? event.data.json()
+        : {};
 
     const title = data.title || "پیام جدید";
 
@@ -10,6 +12,9 @@ self.addEventListener("push", function (event) {
     };
 
     event.waitUntil(
-        self.registration.showNotification(title, options)
+        self.registration.showNotification(
+            title,
+            options
+        )
     );
 });

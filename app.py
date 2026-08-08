@@ -1,10 +1,31 @@
-from flask import Flask, render_template, send_from_directory
+import json
+import os
+
+from flask import Flask, render_template, send_from_directory, request, jsonify
 from flask_socketio import SocketIO
+from pywebpush import webpush, WebPushException
+
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "secret"
 
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*"
+)
+
+
+# محل فایل کلید خصوصی روی Render
+VAPID_PRIVATE_KEY = "/etc/secrets/vapid_private.pem"
+
+# این آدرس باید ایمیل خودت باشد
+VAPID_CLAIMS = {
+    "sub": "mailto:pseyfollahi@gmail.com"
+}
+
+
+# ذخیره Subscription ها
+subscriptions = []
 
 
 @app.route("/")
@@ -22,11 +43,62 @@ def service_worker():
     return send_from_directory(".", "sw.js")
 
 
+# دریافت Push Subscription از گوشی
+@app.route("/subscribe", methods=["POST"])
+def subscribe():
+    subscription = request.get_json()
+
+    if not subscription:
+        return jsonify({
+            "success": False,
+            "message": "Subscription دریافت نشد"
+        }), 400
+
+    # جلوگیری از ذخیره تکراری
+    if subscription not in subscriptions:
+        subscriptions.append(subscription)
+
+    print("Push subscription saved.")
+
+    return jsonify({
+        "success": True
+    })
+
+
+# وقتی دکمه قرمز زده می‌شود
 @socketio.on("button_pressed")
 def button_pressed():
-    socketio.emit("birthday_message", {
+
+    message = {
         "text": "🎉 تولدت مبارک 🎂"
+    }
+
+    # پیام لحظه‌ای برای صفحه گیرنده
+    socketio.emit(
+        "birthday_message",
+        message
+    )
+
+    # ارسال Push Notification
+    push_data = json.dumps({
+        "title": "پیام جدید 🎉",
+        "body": "🎉 تولدت مبارک 🎂"
     })
+
+    for subscription in subscriptions:
+
+        try:
+            webpush(
+                subscription_info=subscription,
+                data=push_data,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims=VAPID_CLAIMS
+            )
+
+            print("Push notification sent.")
+
+        except WebPushException as error:
+            print("Push error:", error)
 
 
 if __name__ == "__main__":

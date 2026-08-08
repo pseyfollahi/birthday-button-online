@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="fa">
 
 <head>
     <meta charset="UTF-8">
-    <title>Receiver</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
@@ -14,6 +14,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            flex-direction: column;
             background: white;
             font-family: Tahoma, sans-serif;
         }
@@ -22,6 +23,13 @@
             font-size: 70px;
             color: green;
             text-align: center;
+        }
+
+        #enableNotifications {
+            margin-top: 40px;
+            padding: 15px 25px;
+            font-size: 20px;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -33,18 +41,81 @@
     <button id="enableNotifications">
         فعال کردن اعلان‌ها
     </button>
-    <script>
 
-        if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register("/sw.js")
-                .then(() => {
-                    console.log("Service Worker registered");
-                })
-                .catch((error) => {
-                    console.error("Service Worker error:", error);
-                });
+    <script>
+        const VAPID_PUBLIC_KEY = "BK5J-HXfz8fa-OWVNtZwxguWBaPbMmX0jKIe4XIEnEV7lt31K1DO7Is6pMtMDsXpWW2qjzGhvsMusNbUmlYG0b8";
+
+        // ثبت Service Worker
+        async function registerServiceWorker() {
+            if (!("serviceWorker" in navigator)) {
+                throw new Error("Service Worker پشتیبانی نمی‌شود.");
+            }
+
+            return await navigator.serviceWorker.register("/sw.js");
         }
 
+        // تبدیل Base64 URL به Uint8Array
+        function urlBase64ToUint8Array(base64String) {
+            const padding = "=".repeat((4 - base64String.length % 4) % 4);
+
+            const base64 = (base64String + padding)
+                .replace(/-/g, "+")
+                .replace(/_/g, "/");
+
+            const rawData = window.atob(base64);
+
+            return Uint8Array.from(
+                [...rawData].map(char => char.charCodeAt(0))
+            );
+        }
+
+        // فعال کردن Push Notification
+        async function enableNotifications() {
+            try {
+                const registration = await registerServiceWorker();
+
+                const permission = await Notification.requestPermission();
+
+                if (permission !== "granted") {
+                    alert("اجازه اعلان‌ها داده نشد.");
+                    return;
+                }
+
+                const subscription =
+                    await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey:
+                            urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                    });
+
+                console.log("Push Subscription:", subscription);
+
+                const response = await fetch("/subscribe", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(subscription)
+                });
+
+                if (response.ok) {
+                    alert("اعلان‌ها فعال شدند ✅");
+                } else {
+                    alert("ثبت اعلان‌ها روی سرور انجام نشد.");
+                }
+
+            } catch (error) {
+                console.error(error);
+                alert("فعال‌سازی اعلان‌ها با خطا مواجه شد.");
+            }
+        }
+
+        document
+            .getElementById("enableNotifications")
+            .addEventListener("click", enableNotifications);
+
+
+        // Socket.IO فعلی پروژه
         const socket = io();
 
         socket.on("birthday_message", function (data) {
