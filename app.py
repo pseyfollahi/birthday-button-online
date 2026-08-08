@@ -1,4 +1,4 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, send_from_directory
 from flask_socketio import SocketIO
 
 app = Flask(__name__)
@@ -15,6 +15,11 @@ def index():
 @app.route("/receiver")
 def receiver():
     return render_template("receiver.html")
+
+
+@app.route("/sw.js")
+def service_worker():
+    return send_from_directory(".", "sw.js")
 
 
 @socketio.on("button_pressed")
