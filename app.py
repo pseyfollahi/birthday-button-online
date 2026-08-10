@@ -2,6 +2,7 @@
 import json
 import os
 import traceback
+from urllib.parse import urlparse
 
 from flask import Flask, render_template, send_from_directory, request, jsonify
 from flask_socketio import SocketIO
@@ -10,6 +11,7 @@ from supabase import create_client, Client
 
 
 app = Flask(__name__)
+
 app.config["SECRET_KEY"] = "secret"
 
 
@@ -25,9 +27,7 @@ socketio = SocketIO(
 
 VAPID_PRIVATE_KEY = "/etc/secrets/vapid_private.pem"
 
-VAPID_CLAIMS = {
-    "sub": "mailto:pseyfollahi@gmail.com"
-}
+VAPID_SUBJECT = "mailto:pseyfollahi@gmail.com"
 
 
 # ---------------------------------
@@ -35,6 +35,7 @@ VAPID_CLAIMS = {
 # ---------------------------------
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
+
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get(
     "SUPABASE_SERVICE_ROLE_KEY"
 )
@@ -42,7 +43,10 @@ SUPABASE_SERVICE_ROLE_KEY = os.environ.get(
 
 print("================================")
 print("SUPABASE CONFIG CHECK")
-print("SUPABASE_URL exists:", bool(SUPABASE_URL))
+print(
+    "SUPABASE_URL exists:",
+    bool(SUPABASE_URL)
+)
 print(
     "SUPABASE_SERVICE_ROLE_KEY exists:",
     bool(SUPABASE_SERVICE_ROLE_KEY)
@@ -86,8 +90,10 @@ def subscribe():
 
     print("================================")
     print("NEW PUSH SUBSCRIPTION RECEIVED")
+    print("================================")
 
     try:
+
         print(
             json.dumps(
                 subscription,
@@ -95,10 +101,10 @@ def subscribe():
                 ensure_ascii=False
             )
         )
-    except Exception:
-        print(subscription)
 
-    print("================================")
+    except Exception:
+
+        print(subscription)
 
     if not subscription:
 
@@ -118,8 +124,6 @@ def subscribe():
 
     try:
 
-        # Check existing subscription
-
         print("Checking Supabase...")
 
         existing = (
@@ -130,12 +134,12 @@ def subscribe():
             .execute()
         )
 
-        print("Supabase check completed.")
-        print("Existing:", existing.data)
+        print(
+            "Existing:",
+            existing.data
+        )
 
         if existing.data:
-
-            print("Subscription already exists.")
 
             (
                 supabase
@@ -147,18 +151,16 @@ def subscribe():
                 .execute()
             )
 
-            print("Subscription updated.")
+            print(
+                "Subscription updated."
+            )
 
             return jsonify({
                 "success": True,
-                "message": "Subscription already exists"
+                "message": "Subscription updated"
             })
 
-        # Insert new subscription
-
-        print("Saving new subscription...")
-
-        result = (
+        (
             supabase
             .table("subscriptions")
             .insert({
@@ -168,10 +170,9 @@ def subscribe():
             .execute()
         )
 
-        print("Supabase insert result:")
-        print(result.data)
-
-        print("Subscription saved successfully.")
+        print(
+            "Subscription saved successfully."
+        )
 
         return jsonify({
             "success": True
@@ -183,13 +184,10 @@ def subscribe():
         print("SUPABASE ERROR")
         print("================================")
 
-        print("Error type:")
-        print(type(error))
+        print(
+            repr(error)
+        )
 
-        print("Error:")
-        print(repr(error))
-
-        print("Traceback:")
         traceback.print_exc()
 
         print("================================")
@@ -201,7 +199,7 @@ def subscribe():
 
 
 # ---------------------------------
-# Button Pressed
+# Send Push Notifications
 # ---------------------------------
 
 @socketio.on("button_pressed")
@@ -211,20 +209,29 @@ def button_pressed():
         "text": "بیا بازی 🎮"
     }
 
-    # Send message to currently open pages
+    # ---------------------------------
+    # Send to currently open pages
+    # ---------------------------------
 
     socketio.emit(
         "birthday_message",
         message
     )
 
+    # ---------------------------------
+    # Push notification data
+    # ---------------------------------
+
     push_data = json.dumps({
+
         "title": "پیام جدید 🎮",
+
         "body": "بیا بازی 🎮"
+
     })
 
     print("================================")
-    print("SENDING PUSH NOTIFICATION")
+    print("STARTING PUSH NOTIFICATIONS")
     print("================================")
 
     try:
@@ -232,56 +239,148 @@ def button_pressed():
         result = (
             supabase
             .table("subscriptions")
-            .select("id, subscription")
+            .select("id, endpoint, subscription")
             .execute()
         )
 
         subscriptions = result.data or []
 
         print(
-            "Subscriptions:",
+            "Total subscriptions:",
             len(subscriptions)
         )
 
+        # ---------------------------------
+        # Send to every device
+        # ---------------------------------
+
         for row in subscriptions:
 
-            subscription = row.get("subscription")
+            subscription = row.get(
+                "subscription"
+            )
+
+            endpoint = row.get(
+                "endpoint"
+            )
 
             if not subscription:
 
                 print(
-                    "Subscription data is empty."
+                    "Empty subscription:",
+                    row.get("id")
+                )
+
+                continue
+
+            if not endpoint:
+
+                print(
+                    "Empty endpoint:",
+                    row.get("id")
                 )
 
                 continue
 
             try:
 
+                # ---------------------------------
+                # Get push service origin
+                # ---------------------------------
+
+                parsed_url = urlparse(
+                    endpoint
+                )
+
+                push_origin = (
+                    f"{parsed_url.scheme}://"
+                    f"{parsed_url.netloc}"
+                )
+
+                print("--------------------------------")
+                print(
+                    "Sending notification to:",
+                    row.get("id")
+                )
+                print(
+                    "Push origin:",
+                    push_origin
+                )
+
+                # ---------------------------------
+                # VAPID claims for THIS device
+                # ---------------------------------
+
+                vapid_claims = {
+
+                    "sub": VAPID_SUBJECT,
+
+                    "aud": push_origin
+
+                }
+
+                # ---------------------------------
+                # Send notification
+                # ---------------------------------
+
                 webpush(
+
                     subscription_info=subscription,
+
                     data=push_data,
+
                     vapid_private_key=VAPID_PRIVATE_KEY,
-                    vapid_claims=VAPID_CLAIMS
+
+                    vapid_claims=vapid_claims
+
                 )
 
                 print(
-                    "Push notification sent successfully."
+                    "Push sent successfully:",
+                    row.get("id")
                 )
 
             except WebPushException as error:
 
-                print("PUSH ERROR:")
-                print(repr(error))
+                print("--------------------------------")
+                print(
+                    "PUSH ERROR for subscription:",
+                    row.get("id")
+                )
+                print(
+                    repr(error)
+                )
 
                 traceback.print_exc()
+
+                print("--------------------------------")
+
+            except Exception as error:
+
+                print("--------------------------------")
+                print(
+                    "GENERAL PUSH ERROR for subscription:",
+                    row.get("id")
+                )
+                print(
+                    repr(error)
+                )
+
+                traceback.print_exc()
+
+                print("--------------------------------")
 
     except Exception as error:
 
         print("================================")
-        print("SUPABASE ERROR WHILE SENDING")
+        print(
+            "SUPABASE ERROR WHILE SENDING"
+        )
         print("================================")
 
-        print(repr(error))
+        print(
+            repr(error)
+        )
 
         traceback.print_exc()
 
@@ -295,8 +394,13 @@ def button_pressed():
 if __name__ == "__main__":
 
     socketio.run(
+
         app,
+
         host="0.0.0.0",
+
         port=5000,
+
         allow_unsafe_werkzeug=True
+
     )
