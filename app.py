@@ -1,6 +1,7 @@
 
 import json
 import os
+import traceback
 
 from flask import Flask, render_template, send_from_directory, request, jsonify
 from flask_socketio import SocketIO
@@ -38,6 +39,17 @@ SUPABASE_SERVICE_ROLE_KEY = os.environ.get(
     "SUPABASE_SERVICE_ROLE_KEY"
 )
 
+
+print("================================")
+print("SUPABASE CONFIG CHECK")
+print("SUPABASE_URL exists:", bool(SUPABASE_URL))
+print(
+    "SUPABASE_SERVICE_ROLE_KEY exists:",
+    bool(SUPABASE_SERVICE_ROLE_KEY)
+)
+print("================================")
+
+
 supabase: Client = create_client(
     SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY
@@ -64,7 +76,7 @@ def service_worker():
 
 
 # ---------------------------------
-# Save Subscription
+# Save Push Subscription
 # ---------------------------------
 
 @app.route("/subscribe", methods=["POST"])
@@ -74,7 +86,18 @@ def subscribe():
 
     print("================================")
     print("NEW PUSH SUBSCRIPTION RECEIVED")
-    print(json.dumps(subscription, indent=2))
+
+    try:
+        print(
+            json.dumps(
+                subscription,
+                indent=2,
+                ensure_ascii=False
+            )
+        )
+    except Exception:
+        print(subscription)
+
     print("================================")
 
     if not subscription:
@@ -95,7 +118,9 @@ def subscribe():
 
     try:
 
-        # Check if subscription already exists
+        # Check existing subscription
+
+        print("Checking Supabase...")
 
         existing = (
             supabase
@@ -105,12 +130,12 @@ def subscribe():
             .execute()
         )
 
+        print("Supabase check completed.")
+        print("Existing:", existing.data)
+
         if existing.data:
 
             print("Subscription already exists.")
-
-            # Update subscription in case
-            # browser refreshed its keys
 
             (
                 supabase
@@ -122,6 +147,8 @@ def subscribe():
                 .execute()
             )
 
+            print("Subscription updated.")
+
             return jsonify({
                 "success": True,
                 "message": "Subscription already exists"
@@ -129,7 +156,9 @@ def subscribe():
 
         # Insert new subscription
 
-        (
+        print("Saving new subscription...")
+
+        result = (
             supabase
             .table("subscriptions")
             .insert({
@@ -139,7 +168,10 @@ def subscribe():
             .execute()
         )
 
-        print("Subscription saved to Supabase.")
+        print("Supabase insert result:")
+        print(result.data)
+
+        print("Subscription saved successfully.")
 
         return jsonify({
             "success": True
@@ -147,8 +179,20 @@ def subscribe():
 
     except Exception as error:
 
-        print("SUPABASE ERROR:")
-        print(error)
+        print("================================")
+        print("SUPABASE ERROR")
+        print("================================")
+
+        print("Error type:")
+        print(type(error))
+
+        print("Error:")
+        print(repr(error))
+
+        print("Traceback:")
+        traceback.print_exc()
+
+        print("================================")
 
         return jsonify({
             "success": False,
@@ -157,7 +201,7 @@ def subscribe():
 
 
 # ---------------------------------
-# Button
+# Button Pressed
 # ---------------------------------
 
 @socketio.on("button_pressed")
@@ -167,7 +211,7 @@ def button_pressed():
         "text": "بیا بازی 🎮"
     }
 
-    # Send message to currently connected pages
+    # Send message to currently open pages
 
     socketio.emit(
         "birthday_message",
@@ -185,8 +229,6 @@ def button_pressed():
 
     try:
 
-        # Get all subscriptions from Supabase
-
         result = (
             supabase
             .table("subscriptions")
@@ -201,11 +243,17 @@ def button_pressed():
             len(subscriptions)
         )
 
-        # Send Push to every subscription
-
         for row in subscriptions:
 
-            subscription = row["subscription"]
+            subscription = row.get("subscription")
+
+            if not subscription:
+
+                print(
+                    "Subscription data is empty."
+                )
+
+                continue
 
             try:
 
@@ -223,16 +271,25 @@ def button_pressed():
             except WebPushException as error:
 
                 print("PUSH ERROR:")
-                print(error)
+                print(repr(error))
+
+                traceback.print_exc()
 
     except Exception as error:
 
-        print("SUPABASE ERROR:")
-        print(error)
+        print("================================")
+        print("SUPABASE ERROR WHILE SENDING")
+        print("================================")
+
+        print(repr(error))
+
+        traceback.print_exc()
+
+        print("================================")
 
 
 # ---------------------------------
-# Start server
+# Start Server
 # ---------------------------------
 
 if __name__ == "__main__":
