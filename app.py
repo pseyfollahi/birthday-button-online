@@ -1,19 +1,26 @@
+
 import json
 import os
 
 from flask import Flask, render_template, send_from_directory, request, jsonify
 from flask_socketio import SocketIO
 from pywebpush import webpush, WebPushException
+from supabase import create_client, Client
 
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "secret"
+
 
 socketio = SocketIO(
     app,
     cors_allowed_origins="*"
 )
 
+
+# ---------------------------------
+# VAPID
+# ---------------------------------
 
 VAPID_PRIVATE_KEY = "/etc/secrets/vapid_private.pem"
 
@@ -22,8 +29,24 @@ VAPID_CLAIMS = {
 }
 
 
-subscriptions = []
+# ---------------------------------
+# Supabase
+# ---------------------------------
 
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get(
+    "SUPABASE_SERVICE_ROLE_KEY"
+)
+
+supabase: Client = create_client(
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY
+)
+
+
+# ---------------------------------
+# Pages
+# ---------------------------------
 
 @app.route("/")
 def index():
@@ -40,6 +63,10 @@ def service_worker():
     return send_from_directory(".", "sw.js")
 
 
+# ---------------------------------
+# Save Subscription
+# ---------------------------------
+
 @app.route("/subscribe", methods=["POST"])
 def subscribe():
 
@@ -51,30 +78,87 @@ def subscribe():
     print("================================")
 
     if not subscription:
+
         return jsonify({
             "success": False,
             "message": "Subscription دریافت نشد"
         }), 400
 
-    # جلوگیری از ثبت تکراری
     endpoint = subscription.get("endpoint")
 
-    for old_subscription in subscriptions:
-        if old_subscription.get("endpoint") == endpoint:
+    if not endpoint:
+
+        return jsonify({
+            "success": False,
+            "message": "Endpoint وجود ندارد"
+        }), 400
+
+    try:
+
+        # Check if subscription already exists
+
+        existing = (
+            supabase
+            .table("subscriptions")
+            .select("id")
+            .eq("endpoint", endpoint)
+            .execute()
+        )
+
+        if existing.data:
+
             print("Subscription already exists.")
+
+            # Update subscription in case
+            # browser refreshed its keys
+
+            (
+                supabase
+                .table("subscriptions")
+                .update({
+                    "subscription": subscription
+                })
+                .eq("endpoint", endpoint)
+                .execute()
+            )
+
             return jsonify({
-                "success": True
+                "success": True,
+                "message": "Subscription already exists"
             })
 
-    subscriptions.append(subscription)
+        # Insert new subscription
 
-    print("Subscription saved successfully.")
-    print("Total subscriptions:", len(subscriptions))
+        (
+            supabase
+            .table("subscriptions")
+            .insert({
+                "endpoint": endpoint,
+                "subscription": subscription
+            })
+            .execute()
+        )
 
-    return jsonify({
-        "success": True
-    })
+        print("Subscription saved to Supabase.")
 
+        return jsonify({
+            "success": True
+        })
+
+    except Exception as error:
+
+        print("SUPABASE ERROR:")
+        print(error)
+
+        return jsonify({
+            "success": False,
+            "message": "خطا در ذخیره Subscription"
+        }), 500
+
+
+# ---------------------------------
+# Button
+# ---------------------------------
 
 @socketio.on("button_pressed")
 def button_pressed():
@@ -83,13 +167,13 @@ def button_pressed():
         "text": "بیا بازی 🎮"
     }
 
-    # نمایش داخل صفحه Receiver
+    # Send message to currently connected pages
+
     socketio.emit(
         "birthday_message",
         message
     )
 
-    # Push Notification
     push_data = json.dumps({
         "title": "پیام جدید 🎮",
         "body": "بیا بازی 🎮"
@@ -97,27 +181,59 @@ def button_pressed():
 
     print("================================")
     print("SENDING PUSH NOTIFICATION")
-    print("Subscriptions:", len(subscriptions))
     print("================================")
 
-    for subscription in subscriptions:
+    try:
 
-        try:
+        # Get all subscriptions from Supabase
 
-            webpush(
-                subscription_info=subscription,
-                data=push_data,
-                vapid_private_key=VAPID_PRIVATE_KEY,
-                vapid_claims=VAPID_CLAIMS
-            )
+        result = (
+            supabase
+            .table("subscriptions")
+            .select("id, subscription")
+            .execute()
+        )
 
-            print("Push notification sent successfully.")
+        subscriptions = result.data or []
 
-        except WebPushException as error:
+        print(
+            "Subscriptions:",
+            len(subscriptions)
+        )
 
-            print("PUSH ERROR:")
-            print(error)
+        # Send Push to every subscription
 
+        for row in subscriptions:
+
+            subscription = row["subscription"]
+
+            try:
+
+                webpush(
+                    subscription_info=subscription,
+                    data=push_data,
+                    vapid_private_key=VAPID_PRIVATE_KEY,
+                    vapid_claims=VAPID_CLAIMS
+                )
+
+                print(
+                    "Push notification sent successfully."
+                )
+
+            except WebPushException as error:
+
+                print("PUSH ERROR:")
+                print(error)
+
+    except Exception as error:
+
+        print("SUPABASE ERROR:")
+        print(error)
+
+
+# ---------------------------------
+# Start server
+# ---------------------------------
 
 if __name__ == "__main__":
 

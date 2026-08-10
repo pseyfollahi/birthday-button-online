@@ -2,3 +2,4 @@ Flask
 Flask-SocketIO
 simple-websocket
 pywebpush
+supabase
