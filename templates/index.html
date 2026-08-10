@@ -5,7 +5,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>Button</title>
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
@@ -14,35 +13,21 @@
         body {
             margin: 0;
             height: 100vh;
-
             display: flex;
             justify-content: center;
             align-items: center;
-
             background: #f5f5f5;
         }
 
-        #sendButton {
+        button {
             width: 220px;
             height: 220px;
-
             border: none;
             border-radius: 50%;
-
             background: red;
             color: white;
-
             font-size: 40px;
-            font-family: Tahoma, sans-serif;
-
             cursor: pointer;
-
-            -webkit-tap-highlight-color: transparent;
-            user-select: none;
-        }
-
-        #sendButton:active {
-            transform: scale(0.97);
         }
     </style>
 </head>
@@ -57,38 +42,7 @@
         const button = document.getElementById("sendButton");
 
         button.addEventListener("click", function () {
-
-            console.log("Button pressed");
-
-            if (socket.connected) {
-
-                socket.emit("button_pressed");
-
-                console.log("button_pressed sent");
-
-            } else {
-
-                console.log("Socket is not connected");
-
-                alert("اتصال به سرور برقرار نیست.");
-            }
-        });
-
-        socket.on("connect", function () {
-
-            console.log(
-                "Connected to server:",
-                socket.id
-            );
-
-        });
-
-        socket.on("disconnect", function () {
-
-            console.log(
-                "Disconnected from server"
-            );
-
+            socket.emit("button_pressed");
         });
     </script>
 
