@@ -1,8 +1,10 @@
+```html
 <!DOCTYPE html>
 <html lang="fa">
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Button</title>
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
@@ -32,16 +34,19 @@
 
 <body>
 
-    <button onclick="sendMessage()">Button</button>
+    <button id="sendButton">Button</button>
 
     <script>
         const socket = io();
 
-        function sendMessage() {
+        const button = document.getElementById("sendButton");
+
+        button.addEventListener("click", function () {
             socket.emit("button_pressed");
-        }
+        });
     </script>
 
 </body>
 
 </html>
+```
