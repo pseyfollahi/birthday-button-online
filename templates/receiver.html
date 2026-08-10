@@ -1,255 +1,383 @@
-<!DOCTYPE html>
-<html lang="fa">
+```html
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+    body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        background: white;
+        font-family: Tahoma, sans-serif;
+    }
 
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    #message {
+        font-size: 70px;
+        color: green;
+        text-align: center;
+    }
 
-    <style>
-        body {
-            margin: 0;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            background: white;
-            font-family: Tahoma, sans-serif;
-        }
+    #enableNotifications {
+        margin-top: 40px;
+        padding: 15px 25px;
+        font-size: 20px;
+        cursor: pointer;
+    }
+</style>
 
-        #message {
-            font-size: 70px;
-            color: green;
-            text-align: center;
-        }
+<div id="message">در انتظار...</div>
 
-        #enableNotifications {
-            margin-top: 40px;
-            padding: 15px 25px;
-            font-size: 20px;
-            cursor: pointer;
-        }
-    </style>
-</head>
+<button id="enableNotifications">
+    فعال کردن اعلان‌ها
+</button>
 
-<body>
+<script>
 
-    <div id="message">در انتظار...</div>
-
-    <button id="enableNotifications">
-        فعال کردن اعلان‌ها
-    </button>
-
-    <script>
-
-        const VAPID_PUBLIC_KEY = "BK5J-HXfz8fa-OWVNtZwxguWBaPbMmX0jKIe4XIEnEV7lt31K1DO7Is6pMtMDsXpWW2qjzGhvsMusNbUmlYG0b8";
+    const VAPID_PUBLIC_KEY =
+        "BK5J-HXfz8fa-OWVNtZwxguWBaPbMmX0jKIe4XIEnEV7lt31K1DO7Is6pMtMDsXpWW2qjzGhvsMusNbUmlYG0b8";
 
 
-        function urlBase64ToUint8Array(base64String) {
+    function urlBase64ToUint8Array(base64String) {
 
-            const padding =
-                "=".repeat(
-                    (4 - base64String.length % 4) % 4
-                );
-
-            const base64 =
-                (base64String + padding)
-                    .replace(/-/g, "+")
-                    .replace(/_/g, "/");
-
-            const rawData =
-                window.atob(base64);
-
-            return Uint8Array.from(
-                [...rawData].map(
-                    char => char.charCodeAt(0)
-                )
+        const padding =
+            "=".repeat(
+                (4 - base64String.length % 4) % 4
             );
+
+        const base64 =
+            (base64String + padding)
+                .replace(/-/g, "+")
+                .replace(/_/g, "/");
+
+        const rawData =
+            window.atob(base64);
+
+        return Uint8Array.from(
+            [...rawData].map(
+                char => char.charCodeAt(0)
+            )
+        );
+    }
+
+
+    /* ---------------------------------
+       ارسال Subscription به سرور
+    --------------------------------- */
+
+    async function sendSubscriptionToServer(subscription) {
+
+        const response =
+            await fetch(
+                "/subscribe",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify(subscription)
+                }
+            );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                "سرور Subscription را قبول نکرد."
+            );
+
         }
 
 
-        async function enableNotifications() {
+        const result =
+            await response.json();
 
-            try {
 
-                console.log(
-                    "Starting notification setup..."
+        console.log(
+            "Server response:",
+            result
+        );
+
+    }
+
+
+    /* ---------------------------------
+       بررسی Subscription قبلی
+    --------------------------------- */
+
+    async function checkExistingSubscription() {
+
+        try {
+
+            if (!("serviceWorker" in navigator)) {
+                return;
+            }
+
+
+            if (!("PushManager" in window)) {
+                return;
+            }
+
+
+            const registration =
+                await navigator.serviceWorker.register(
+                    "/sw.js"
                 );
 
 
-                if (!("serviceWorker" in navigator)) {
-
-                    throw new Error(
-                        "Service Worker پشتیبانی نمی‌شود."
-                    );
-
-                }
+            await navigator.serviceWorker.ready;
 
 
-                const registration =
-                    await navigator.serviceWorker.register(
-                        "/sw.js"
-                    );
+            const permission =
+                Notification.permission;
 
 
-                console.log(
-                    "Service Worker registered."
-                );
+            console.log(
+                "Current notification permission:",
+                permission
+            );
 
 
-                await navigator.serviceWorker.ready;
+            /*
+             اگر قبلاً اجازه داده شده،
+             Subscription قبلی را پیدا کن
+            */
 
+            if (permission === "granted") {
 
-                if (!("PushManager" in window)) {
-
-                    throw new Error(
-                        "Push API در این مرورگر پشتیبانی نمی‌شود."
-                    );
-
-                }
-
-
-                const permission =
-                    await Notification.requestPermission();
-
-
-                console.log(
-                    "Notification permission:",
-                    permission
-                );
-
-
-                if (permission !== "granted") {
-
-                    throw new Error(
-                        "اجازه اعلان‌ها داده نشد."
-                    );
-
-                }
-
-
-                let subscription =
+                const subscription =
                     await registration.pushManager.getSubscription();
 
 
-                if (!subscription) {
+                if (subscription) {
 
-                    subscription =
-                        await registration.pushManager.subscribe({
-
-                            userVisibleOnly: true,
-
-                            applicationServerKey:
-                                urlBase64ToUint8Array(
-                                    VAPID_PUBLIC_KEY
-                                )
-
-                        });
-
-                }
-
-
-                console.log(
-                    "Push subscription:",
-                    subscription
-                );
-
-
-                const response =
-                    await fetch(
-                        "/subscribe",
-                        {
-                            method: "POST",
-
-                            headers: {
-                                "Content-Type":
-                                    "application/json"
-                            },
-
-                            body:
-                                JSON.stringify(
-                                    subscription
-                                )
-                        }
+                    console.log(
+                        "Existing subscription found."
                     );
 
 
-                if (!response.ok) {
+                    await sendSubscriptionToServer(
+                        subscription
+                    );
 
-                    throw new Error(
-                        "سرور Subscription را قبول نکرد."
+
+                    document
+                        .getElementById(
+                            "enableNotifications"
+                        )
+                        .style.display =
+                        "none";
+
+
+                    console.log(
+                        "Existing subscription restored."
                     );
 
                 }
-
-
-                const result =
-                    await response.json();
-
-
-                console.log(
-                    "Server response:",
-                    result
-                );
-
-
-                alert(
-                    "اعلان‌ها فعال شدند ✅"
-                );
-
-
-            } catch (error) {
-
-                console.error(
-                    "Notification error:",
-                    error
-                );
-
-
-                alert(
-                    "خطا:\n" +
-                    (
-                        error.message ||
-                        error
-                    )
-                );
 
             }
+
+        } catch (error) {
+
+            console.error(
+                "Existing subscription check failed:",
+                error
+            );
 
         }
 
+    }
 
-        document
-            .getElementById(
-                "enableNotifications"
-            )
-            .addEventListener(
-                "click",
-                enableNotifications
+
+    /* ---------------------------------
+       فعال کردن اعلان‌ها
+    --------------------------------- */
+
+    async function enableNotifications() {
+
+        try {
+
+            console.log(
+                "Starting notification setup..."
             );
 
 
-        const socket = io();
+            if (!("serviceWorker" in navigator)) {
 
-
-        socket.on(
-            "birthday_message",
-            function (data) {
-
-                document
-                    .getElementById(
-                        "message"
-                    )
-                    .innerHTML =
-                    data.text;
+                throw new Error(
+                    "Service Worker پشتیبانی نمی‌شود."
+                );
 
             }
+
+
+            if (!("PushManager" in window)) {
+
+                throw new Error(
+                    "Push API در این مرورگر پشتیبانی نمی‌شود."
+                );
+
+            }
+
+
+            const registration =
+                await navigator.serviceWorker.register(
+                    "/sw.js"
+                );
+
+
+            await navigator.serviceWorker.ready;
+
+
+            let permission =
+                Notification.permission;
+
+
+            /*
+             فقط اگر هنوز اجازه گرفته نشده،
+             درخواست Permission کن
+            */
+
+            if (permission === "default") {
+
+                permission =
+                    await Notification.requestPermission();
+
+            }
+
+
+            console.log(
+                "Notification permission:",
+                permission
+            );
+
+
+            if (permission !== "granted") {
+
+                throw new Error(
+                    "اجازه اعلان‌ها داده نشده است."
+                );
+
+            }
+
+
+            let subscription =
+                await registration.pushManager.getSubscription();
+
+
+            /*
+             اگر Subscription قبلی وجود نداشت،
+             یک Subscription جدید بساز
+            */
+
+            if (!subscription) {
+
+                subscription =
+                    await registration.pushManager.subscribe({
+
+                        userVisibleOnly: true,
+
+                        applicationServerKey:
+                            urlBase64ToUint8Array(
+                                VAPID_PUBLIC_KEY
+                            )
+
+                    });
+
+            }
+
+
+            console.log(
+                "Push subscription:",
+                subscription
+            );
+
+
+            await sendSubscriptionToServer(
+                subscription
+            );
+
+
+            document
+                .getElementById(
+                    "enableNotifications"
+                )
+                .style.display =
+                "none";
+
+
+            alert(
+                "اعلان‌ها فعال شدند ✅"
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                "Notification error:",
+                error
+            );
+
+
+            alert(
+                "خطا:\n" +
+                (
+                    error.message ||
+                    error
+                )
+            );
+
+        }
+
+    }
+
+
+    /* ---------------------------------
+       دکمه اعلان‌ها
+    --------------------------------- */
+
+    document
+        .getElementById(
+            "enableNotifications"
+        )
+        .addEventListener(
+            "click",
+            enableNotifications
         );
 
-    </script>
 
-</body>
+    /* ---------------------------------
+       بررسی خودکار هنگام باز شدن صفحه
+    --------------------------------- */
 
-</html>
+    checkExistingSubscription();
+
+
+    /* ---------------------------------
+       Socket.IO
+    --------------------------------- */
+
+    const socket = io();
+
+
+    socket.on(
+        "birthday_message",
+        function (data) {
+
+            document
+                .getElementById(
+                    "message"
+                )
+                .innerHTML =
+                data.text;
+
+        }
+    );
+
+</script>
+```
